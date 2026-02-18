@@ -125,7 +125,12 @@ export async function reverseGeocode(lat: number, lng: number): Promise<PlaceInf
 }
 
 // ─── Search Places (Nominatim – free, no key) ───
-export async function searchPlaces(query: string, limit = 5): Promise<SearchResult[]> {
+export async function searchPlaces(
+    query: string,
+    limit = 10,
+    nearLat?: number,
+    nearLng?: number
+): Promise<SearchResult[]> {
     if (!query.trim()) return [];
 
     try {
@@ -135,13 +140,23 @@ export async function searchPlaces(query: string, limit = 5): Promise<SearchResu
         );
         const data = await res.json();
 
-        return data.map((item: Record<string, unknown>) => ({
+        let results: SearchResult[] = data.map((item: Record<string, unknown>) => ({
             lat: parseFloat(item.lat as string),
             lng: parseFloat(item.lon as string),
             displayName: item.display_name as string,
             type: item.type as string,
             importance: item.importance as number,
         }));
+
+        if (nearLat !== undefined && nearLng !== undefined) {
+            results = results.sort((a, b) => {
+                const distA = distanceBetween(nearLat, nearLng, a.lat, a.lng);
+                const distB = distanceBetween(nearLat, nearLng, b.lat, b.lng);
+                return distA - distB;
+            });
+        }
+
+        return results;
     } catch {
         return [];
     }

@@ -29,7 +29,19 @@ export default function LocationSearch({
             return;
         }
         setLoading(true);
-        const res = await searchPlaces(q, 5);
+
+        let nearLat: number | undefined;
+        let nearLng: number | undefined;
+
+        try {
+            const pos = await getCurrentPosition();
+            nearLat = pos.lat;
+            nearLng = pos.lng;
+        } catch {
+            // No permissions or error, search anyway
+        }
+
+        const res = await searchPlaces(q, 10, nearLat, nearLng);
         setResults(res);
         setLoading(false);
         setIsOpen(true);

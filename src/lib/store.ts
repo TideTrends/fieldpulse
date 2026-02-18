@@ -43,7 +43,7 @@ export interface FuelLog {
   station: string;
   notes: string;
   receiptPhoto: string | null;
-  fuelType: 'regular' | 'mid' | 'premium' | 'diesel';
+  fuelType: string;
 }
 
 export interface DailyNote {
@@ -137,6 +137,7 @@ export interface UserProfile {
   weeklyGoal: WeeklyGoal;
   currency: string;
   dateFormat: 'US' | 'EU';
+  tags: string[];
 }
 
 export type ToastType = 'success' | 'error' | 'info';
@@ -277,6 +278,7 @@ export const useStore = create<AppState>()(
         },
         currency: 'USD',
         dateFormat: 'US',
+        tags: ['CA', 'FL', 'FLA', 'AM', 'PM', 'TRAINING', 'out of state'],
       },
       setProfile: (updates) =>
         set((s) => ({ profile: { ...s.profile, ...updates } })),
@@ -437,7 +439,7 @@ export const useStore = create<AppState>()(
         })),
 
       // Tags
-      customTags: ['CA', 'FL', 'TX', 'NY', 'Advance', 'Travel', 'Office', 'Field', 'Per Diem', 'Jobsite', 'Meeting'],
+      customTags: ['CA', 'FL', 'FLA', 'AM', 'PM', 'TRAINING', 'out of state'],
       addTag: (tag) =>
         set((s) => ({
           customTags: [...new Set([...s.customTags, tag])],
@@ -582,7 +584,7 @@ export const useStore = create<AppState>()(
       clearToast: () => set({ toast: null }),
     }),
     {
-      name: 'fieldpulse-storage',
+      name: 'fieldpulse-storage-v2',
     }
   )
 );
@@ -622,6 +624,10 @@ export function getTotalFuelToday(logs: FuelLog[]): number {
     .reduce((sum, l) => sum + l.gallons, 0);
 }
 
+export function getTodayFuel(logs: FuelLog[]): number {
+  return getTotalFuelToday(logs);
+}
+
 export function getWeekEntries(entries: TimeEntry[]): TimeEntry[] {
   const now = new Date();
   const startOfWeek = new Date(now);
@@ -644,6 +650,32 @@ export function getWeeklyHours(entries: TimeEntry[]): { day: string; hours: numb
     const hours = dayEntries.reduce((sum, e) => sum + getHoursFromEntry(e), 0);
     return { day, hours: Math.round(hours * 10) / 10 };
   });
+}
+
+export function getHoursForRange(entries: TimeEntry[], rangeDays: number): number {
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(now.getDate() - rangeDays + 1);
+  start.setHours(0, 0, 0, 0);
+
+  return entries
+    .filter((e) => new Date(e.date) >= start)
+    .reduce((sum, e) => sum + getHoursFromEntry(e), 0);
+}
+
+export function getMilesForRange(entries: MileageEntry[], rangeDays: number, purpose?: 'work' | 'personal'): number {
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(now.getDate() - rangeDays + 1);
+  start.setHours(0, 0, 0, 0);
+
+  return entries
+    .filter((e) => {
+      const isAfterStart = new Date(e.date) >= start;
+      const matchesPurpose = !purpose || e.purpose === purpose;
+      return isAfterStart && matchesPurpose;
+    })
+    .reduce((sum, e) => sum + e.tripMiles, 0);
 }
 
 export function getWeeklyMiles(entries: MileageEntry[]): number {
