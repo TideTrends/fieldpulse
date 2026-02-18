@@ -17,6 +17,7 @@ import {
     getHoursForRange,
     type TimeEntry,
 } from '@/lib/store';
+import TagSelector from '@/components/TagSelector';
 
 export default function TimePage() {
     const {
@@ -45,6 +46,9 @@ export default function TimePage() {
     const [editNotes, setEditNotes] = useState('');
     const [editBreak, setEditBreak] = useState('');
     const [editTags, setEditTags] = useState<string[]>([]);
+    const [editDate, setEditDate] = useState('');
+    const [editStartTime, setEditStartTime] = useState('');
+    const [editEndTime, setEditEndTime] = useState('');
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -121,12 +125,12 @@ export default function TimePage() {
         showToast('Manual entry added!');
     };
 
-    const handleAddCustomTag = () => {
-        if (newTag.trim()) {
-            addTag(newTag.trim());
-            setManualTags(prev => [...prev, newTag.trim()]);
-            setNewTag('');
-        }
+    const toggleManualTag = (tag: string) => {
+        setManualTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+    };
+
+    const toggleEditTag = (tag: string) => {
+        setEditTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
     };
 
     const startEdit = (entry: TimeEntry) => {
@@ -134,13 +138,33 @@ export default function TimePage() {
         setEditNotes(entry.notes);
         setEditBreak(entry.breakMinutes.toString());
         setEditTags(entry.tags);
+        setEditDate(entry.date);
+
+        const start = new Date(entry.startTime);
+        setEditStartTime(start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
+
+        if (entry.endTime) {
+            const end = new Date(entry.endTime);
+            setEditEndTime(end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
+        } else {
+            setEditEndTime('');
+        }
     };
 
     const saveEdit = (id: string) => {
+        const startISO = new Date(`${editDate}T${editStartTime}`).toISOString();
+        let endISO = null;
+        if (editEndTime) {
+            endISO = new Date(`${editDate}T${editEndTime}`).toISOString();
+        }
+
         updateTimeEntry(id, {
             notes: editNotes,
             breakMinutes: parseInt(editBreak) || 0,
             tags: editTags,
+            date: editDate,
+            startTime: startISO,
+            endTime: endISO,
         });
         setEditingId(null);
         showToast('Entry updated');
@@ -178,10 +202,26 @@ export default function TimePage() {
                     <p className="text-caption-mono" style={{ textTransform: 'uppercase', letterSpacing: '0.15em' }}>
                         {isTimerRunning ? 'Shift in Progress' : 'Ready to Start'}
                     </p>
+                    {isTimerRunning && activeTimerStart && (
+                        <p className="text-caption" style={{ color: 'var(--fp-text-muted)' }}>
+                            Started {new Date(activeTimerStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                    )}
                     <motion.p
                         className="text-mono-xl"
-                        style={{ color: isTimerRunning ? 'var(--fp-amber)' : 'var(--fp-text-primary)' }}
+                        style={{ color: isTimerRunning ? 'var(--fp-amber)' : 'var(--fp-text-primary)', position: 'relative' }}
                     >
+                        {isTimerRunning && (
+                            <motion.span
+                                style={{
+                                    position: 'absolute', left: -20, top: '50%', transform: 'translateY(-50%)',
+                                    width: 8, height: 8, borderRadius: '50%',
+                                    background: 'var(--fp-amber)', display: 'block',
+                                }}
+                                animate={{ opacity: [1, 0.2, 1] }}
+                                transition={{ duration: 1.5, repeat: Infinity }}
+                            />
+                        )}
                         {isTimerRunning ? formatDuration(elapsed) : '00:00:00'}
                     </motion.p>
                     <motion.button
@@ -229,8 +269,21 @@ export default function TimePage() {
                                 </div>
                             </div>
                             <div className="input-group">
-                                <label className="input-label">Break (minutes)</label>
-                                <input className="input" type="number" value={manualBreak} onChange={e => setManualBreak(e.target.value)} />
+                                <label className="input-label">Break</label>
+                                <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.375rem', flexWrap: 'wrap' }}>
+                                    {[0, 15, 30, 45, 60].map(m => (
+                                        <button
+                                            key={m}
+                                            type="button"
+                                            className={`tag ${manualBreak === String(m) ? 'tag-active' : ''}`}
+                                            onClick={() => setManualBreak(String(m))}
+                                            style={{ fontSize: '0.6875rem' }}
+                                        >
+                                            {m === 0 ? 'None' : `${m}m`}
+                                        </button>
+                                    ))}
+                                </div>
+                                <input className="input" type="number" placeholder="or enter minutes" value={manualBreak} onChange={e => setManualBreak(e.target.value)} />
                             </div>
                             <div className="input-group">
                                 <label className="input-label">Notes</label>
@@ -243,32 +296,10 @@ export default function TimePage() {
                                 />
                             </div>
 
-                            <div>
-                                <label className="input-label" style={{ marginBottom: '0.5rem' }}>Tags</label>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginBottom: '0.75rem' }}>
-                                    {customTags.map(tag => (
-                                        <button
-                                            key={tag}
-                                            className={`tag ${manualTags.includes(tag) ? 'tag-active' : ''}`}
-                                            onClick={() => setManualTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
-                                        >
-                                            {tag}
-                                        </button>
-                                    ))}
-                                </div>
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <input
-                                        className="input"
-                                        placeholder="Add custom tag..."
-                                        value={newTag}
-                                        onChange={e => setNewTag(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && handleAddCustomTag()}
-                                    />
-                                    <button className="btn btn-secondary btn-icon" onClick={handleAddCustomTag}>
-                                        <Plus size={14} />
-                                    </button>
-                                </div>
-                            </div>
+                            <TagSelector
+                                selectedTags={manualTags}
+                                onTagToggle={toggleManualTag}
+                            />
 
                             <button className="btn btn-primary" style={{ marginTop: '0.5rem' }} onClick={handleManualSubmit}>
                                 Save Entry
@@ -373,18 +404,11 @@ export default function TimePage() {
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                                                    {customTags.map(tag => (
-                                                        <button
-                                                            key={tag}
-                                                            className={`tag ${editTags.includes(tag) ? 'tag-active' : ''}`}
-                                                            onClick={() => setEditTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
-                                                            style={{ fontSize: '0.625rem' }}
-                                                        >
-                                                            {tag}
-                                                        </button>
-                                                    ))}
-                                                </div>
+                                                <TagSelector
+                                                    selectedTags={editTags}
+                                                    onTagToggle={toggleEditTag}
+                                                    label=""
+                                                />
                                             )}
                                         </div>
                                     )}
@@ -408,10 +432,26 @@ export default function TimePage() {
                                     )}
 
                                     {isEditing && (
-                                        <div className="input-group" style={{ marginTop: '0.75rem' }}>
-                                            <label className="input-label">Break (min)</label>
-                                            <input className="input" type="number" value={editBreak} onChange={e => setEditBreak(e.target.value)} />
-                                            <button className="btn btn-primary" style={{ marginTop: '0.5rem' }} onClick={() => saveEdit(entry.id)}>
+                                        <div className="section-gap" style={{ marginTop: '0.75rem', gap: '0.75rem' }}>
+                                            <div className="input-group">
+                                                <label className="input-label"><Calendar size={12} /> Date</label>
+                                                <input className="input" type="date" value={editDate} onChange={e => setEditDate(e.target.value)} />
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                                <div className="input-group">
+                                                    <label className="input-label">Start Time</label>
+                                                    <input className="input" type="time" value={editStartTime} onChange={e => setEditStartTime(e.target.value)} />
+                                                </div>
+                                                <div className="input-group">
+                                                    <label className="input-label">End Time</label>
+                                                    <input className="input" type="time" value={editEndTime} onChange={e => setEditEndTime(e.target.value)} />
+                                                </div>
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Break (min)</label>
+                                                <input className="input" type="number" value={editBreak} onChange={e => setEditBreak(e.target.value)} />
+                                            </div>
+                                            <button className="btn btn-primary" style={{ marginTop: '0.25rem' }} onClick={() => saveEdit(entry.id)}>
                                                 Save Changes
                                             </button>
                                         </div>

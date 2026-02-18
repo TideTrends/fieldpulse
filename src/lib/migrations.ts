@@ -24,9 +24,14 @@ export async function runMigrations(): Promise<void> {
             weekly_goal_fuel_budget INTEGER NOT NULL DEFAULT 200,
             currency TEXT NOT NULL DEFAULT 'USD',
             date_format TEXT NOT NULL DEFAULT 'US',
+            tags TEXT[] NOT NULL DEFAULT '{}',
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
     `);
+
+    // Add tags column if upgrading from older schema
+    await query(`ALTER TABLE fp_profile ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';`);
+
 
     await query(`
         CREATE TABLE IF NOT EXISTS fp_time_entries (

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Fuel, Trash2, Calendar, Plus, Info,
-    History, Droplets, Gauge, Clock
+    History, Droplets, Gauge, Clock, Edit3, X, Check
 } from 'lucide-react';
 import {
     useStore,
@@ -14,7 +14,7 @@ import {
 
 export default function FuelPage() {
     const {
-        fuelLogs, addFuelLog, deleteFuelLog,
+        fuelLogs, addFuelLog, updateFuelLog, deleteFuelLog,
         showToast,
     } = useStore();
 
@@ -25,6 +25,15 @@ export default function FuelPage() {
     const [mileage, setMileage] = useState('');
     const [notes, setNotes] = useState('');
     const [fuelType, setFuelType] = useState('Gasoline');
+
+    // Edit State
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editDate, setEditDate] = useState('');
+    const [editTime, setEditTime] = useState('');
+    const [editGallons, setEditGallons] = useState('');
+    const [editMileage, setEditMileage] = useState('');
+    const [editNotes, setEditNotes] = useState('');
+    const [editFuelType, setEditFuelType] = useState('');
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -68,6 +77,37 @@ export default function FuelPage() {
         setMileage('');
         setNotes('');
         showToast('Fuel log saved!');
+    };
+
+    const startEdit = (log: FuelLog) => {
+        setEditingId(log.id);
+        setEditDate(log.date);
+        setEditTime(log.time);
+        setEditGallons(log.gallons.toString());
+        setEditMileage(log.mileage.toString());
+        setEditNotes(log.notes);
+        setEditFuelType(log.fuelType);
+    };
+
+    const saveEdit = (id: string) => {
+        const g = parseFloat(editGallons);
+        const m = parseFloat(editMileage);
+
+        if (isNaN(g) || isNaN(m)) {
+            showToast('Fill in all required fields', 'error');
+            return;
+        }
+
+        updateFuelLog(id, {
+            date: editDate,
+            time: editTime,
+            gallons: g,
+            mileage: m,
+            notes: editNotes,
+            fuelType: editFuelType,
+        });
+        setEditingId(null);
+        showToast('Log updated');
     };
 
     if (!mounted) return null;
@@ -213,14 +253,55 @@ export default function FuelPage() {
                                             <p className="text-caption" style={{ fontWeight: 600 }}>{log.mileage.toLocaleString()} miles</p>
                                         </div>
                                     </div>
-                                    <button
-                                        className="btn btn-ghost btn-icon"
-                                        onClick={() => { deleteFuelLog(log.id); showToast('Log deleted'); }}
-                                        style={{ height: 32, width: 32 }}
-                                    >
-                                        <Trash2 size={14} style={{ color: 'var(--fp-error)' }} />
-                                    </button>
+                                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                        <button
+                                            className="btn btn-ghost btn-icon"
+                                            onClick={() => editingId === log.id ? setEditingId(null) : startEdit(log)}
+                                            style={{ height: 32, width: 32 }}
+                                        >
+                                            {editingId === log.id ? <X size={14} /> : <Edit3 size={14} />}
+                                        </button>
+                                        <button
+                                            className="btn btn-ghost btn-icon"
+                                            onClick={() => { deleteFuelLog(log.id); showToast('Log deleted'); }}
+                                            style={{ height: 32, width: 32 }}
+                                        >
+                                            <Trash2 size={14} style={{ color: 'var(--fp-error)' }} />
+                                        </button>
+                                    </div>
                                 </div>
+
+                                {editingId === log.id && (
+                                    <div className="section-gap" style={{ marginTop: '1rem', gap: '0.75rem', padding: '1rem', background: 'var(--fp-surface)', borderRadius: 'var(--fp-radius-md)', border: '1px solid var(--fp-border)' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                            <div className="input-group">
+                                                <label className="input-label">Date</label>
+                                                <input className="input" type="date" value={editDate} onChange={e => setEditDate(e.target.value)} />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Time</label>
+                                                <input className="input" type="time" value={editTime} onChange={e => setEditTime(e.target.value)} />
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                            <div className="input-group">
+                                                <label className="input-label">Gallons</label>
+                                                <input className="input" type="number" value={editGallons} onChange={e => setEditGallons(e.target.value)} />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Mileage</label>
+                                                <input className="input" type="number" value={editMileage} onChange={e => setEditMileage(e.target.value)} />
+                                            </div>
+                                        </div>
+                                        <div className="input-group">
+                                            <label className="input-label">Notes</label>
+                                            <input className="input" value={editNotes} onChange={e => setEditNotes(e.target.value)} />
+                                        </div>
+                                        <button className="btn btn-primary" onClick={() => saveEdit(log.id)}>
+                                            <Check size={14} /> Save Changes
+                                        </button>
+                                    </div>
+                                )}
                                 {log.notes && (
                                     <div style={{ marginTop: '0.75rem', padding: '0.625rem', background: 'var(--fp-surface)', borderRadius: 'var(--fp-radius-sm)', borderLeft: '2px solid var(--fp-emerald)' }}>
                                         <p className="text-body" style={{ fontSize: '0.75rem', color: 'var(--fp-text-secondary)', fontStyle: 'italic' }}>

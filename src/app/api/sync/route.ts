@@ -117,6 +117,7 @@ export async function GET() {
                 },
                 currency: row.currency,
                 dateFormat: row.date_format,
+                tags: Array.isArray(row.tags) ? row.tags : [],
             };
         }
 
@@ -153,14 +154,14 @@ export async function POST(req: NextRequest) {
                 INSERT INTO fp_profile (id, name, company, role, default_start_hour, default_end_hour,
                     mileage_unit, fuel_unit, onboarding_complete, hourly_rate, overtime_threshold,
                     overtime_multiplier, weekly_goal_hours, weekly_goal_miles, weekly_goal_fuel_budget,
-                    currency, date_format, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW())
+                    currency, date_format, tags, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW())
                 ON CONFLICT (id) DO UPDATE SET
                     name = $2, company = $3, role = $4, default_start_hour = $5, default_end_hour = $6,
                     mileage_unit = $7, fuel_unit = $8, onboarding_complete = $9, hourly_rate = $10,
                     overtime_threshold = $11, overtime_multiplier = $12, weekly_goal_hours = $13,
                     weekly_goal_miles = $14, weekly_goal_fuel_budget = $15, currency = $16,
-                    date_format = $17, updated_at = NOW()
+                    date_format = $17, tags = $18, updated_at = NOW()
             `, [
                 'default', p.name || '', p.company || '', p.role || '',
                 p.defaultStartHour ?? 7, p.defaultEndHour ?? 17,
@@ -169,7 +170,7 @@ export async function POST(req: NextRequest) {
                 p.overtimeThreshold ?? 8, p.overtimeMultiplier ?? 1.5,
                 p.weeklyGoal?.hoursTarget ?? 40, p.weeklyGoal?.milesTarget ?? 500,
                 p.weeklyGoal?.fuelBudget ?? 200, p.currency || 'USD',
-                p.dateFormat || 'US',
+                p.dateFormat || 'US', p.tags || [],
             ]);
         }
 

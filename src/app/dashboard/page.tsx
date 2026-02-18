@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Play, Square, Clock, MapPin, Fuel, FileText,
     TrendingUp, Flame, ChevronRight, DollarSign,
-    Target, Zap, Calendar, Sun, Moon,
+    Zap, Calendar, Sun, Moon, BarChart2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/components/ThemeProvider';
@@ -18,7 +18,6 @@ import {
     getWeeklyHours,
     getWeekEntries,
     getWeeklyMiles,
-    getWeeklyFuelCost,
     getOvertimeHours,
     calculateEarnings,
     formatDuration,
@@ -38,7 +37,7 @@ export default function DashboardPage() {
         profile, isTimerRunning, activeTimerStart,
         startTimer, stopTimer, showToast,
         timeEntries, mileageEntries, fuelLogs, dailyNotes,
-        streakCount, locationLogs,
+        streakCount, locationLogs, addTimeEntry,
     } = useStore();
 
     const [elapsed, setElapsed] = useState(0);
@@ -76,7 +75,7 @@ export default function DashboardPage() {
     const weeklyHours = useMemo(() => getWeeklyHours(timeEntries), [timeEntries]);
     const totalWeekHours = useMemo(() => weekEntries.reduce((s, e) => s + getHoursFromEntry(e), 0), [weekEntries]);
     const weeklyMiles = useMemo(() => getWeeklyMiles(mileageEntries), [mileageEntries]);
-    const weeklyFuel = useMemo(() => getWeeklyFuelCost(fuelLogs), [fuelLogs]);
+
     const overtimeToday = useMemo(() => getOvertimeHours(timeEntries, profile.overtimeThreshold), [timeEntries, profile.overtimeThreshold]);
     const maxBarHours = useMemo(() => Math.max(...weeklyHours.map(d => d.hours), 1), [weeklyHours]);
 
@@ -85,10 +84,6 @@ export default function DashboardPage() {
         if (!profile.hourlyRate) return null;
         return calculateEarnings(weekEntries, profile.hourlyRate, profile.overtimeMultiplier, profile.overtimeThreshold);
     }, [weekEntries, profile.hourlyRate, profile.overtimeMultiplier, profile.overtimeThreshold]);
-
-    // Goal progress
-    const hoursGoalPct = Math.min((totalWeekHours / profile.weeklyGoal.hoursTarget) * 100, 100);
-    const milesGoalPct = Math.min((weeklyMiles / profile.weeklyGoal.milesTarget) * 100, 100);
 
     // Recent activity
     const recentActivity = useMemo(() => {
@@ -136,10 +131,6 @@ export default function DashboardPage() {
 
     if (!mounted) return null;
 
-    // Goal ring SVG params
-    const ringR = 38;
-    const ringC = 2 * Math.PI * ringR;
-
     return (
         <div className="page-container section-gap" style={{ paddingTop: '1rem' }}>
             {/* Header */}
@@ -154,7 +145,7 @@ export default function DashboardPage() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.05 }}
                     >
-                        Hey, {profile.name || 'there'} 👋
+                        Hey, {profile.name || 'there'}
                     </motion.h1>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -190,13 +181,29 @@ export default function DashboardPage() {
                 <p className="text-caption" style={{ textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.6875rem' }}>
                     {isTimerRunning ? 'Shift in Progress' : 'Ready to Work'}
                 </p>
+                {isTimerRunning && activeTimerStart && (
+                    <p className="text-caption" style={{ color: 'var(--fp-text-muted)', marginTop: '-0.5rem' }}>
+                        Started {new Date(activeTimerStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                )}
                 <motion.p
                     className="text-mono-lg"
-                    style={{ color: isTimerRunning ? 'var(--fp-amber)' : 'var(--fp-text-primary)' }}
+                    style={{ color: isTimerRunning ? 'var(--fp-amber)' : 'var(--fp-text-primary)', position: 'relative' }}
                     key={isTimerRunning ? 'running' : 'idle'}
                     initial={{ scale: 0.95 }}
                     animate={{ scale: 1 }}
                 >
+                    {isTimerRunning && (
+                        <motion.span
+                            style={{
+                                position: 'absolute', left: -18, top: '50%', transform: 'translateY(-50%)',
+                                width: 8, height: 8, borderRadius: '50%',
+                                background: 'var(--fp-amber)', display: 'block',
+                            }}
+                            animate={{ opacity: [1, 0.2, 1] }}
+                            transition={{ duration: 1.5, repeat: Infinity }}
+                        />
+                    )}
                     {isTimerRunning ? formatDuration(elapsed) : '00:00:00'}
                 </motion.p>
                 <motion.button
@@ -214,6 +221,31 @@ export default function DashboardPage() {
                     >
                         <Zap size={10} /> OT: +{formatHoursMinutes(overtimeToday)}
                     </motion.div>
+                )}
+                {!isTimerRunning && (
+                    <button
+                        className="btn btn-ghost"
+                        style={{ fontSize: '0.75rem', padding: '0.375rem 0.875rem', border: '1px dashed var(--fp-border)' }}
+                        onClick={() => {
+                            const today = new Date().toISOString().split('T')[0];
+                            const start = new Date(`${today}T${String(profile.defaultStartHour).padStart(2, '0')}:00:00`);
+                            const end = new Date(`${today}T${String(profile.defaultEndHour).padStart(2, '0')}:00:00`);
+                            const hoursWorked = (end.getTime() - start.getTime()) / 3600000;
+                            addTimeEntry({
+                                startTime: start.toISOString(),
+                                endTime: end.toISOString(),
+                                breakMinutes: 30,
+                                notes: 'Quick logged',
+                                tags: [],
+                                date: today,
+                                isOvertime: hoursWorked > profile.overtimeThreshold,
+                                hourlyRate: profile.hourlyRate || null,
+                            });
+                            showToast('Shift logged!');
+                        }}
+                    >
+                        <Calendar size={12} /> Quick Log Today
+                    </button>
                 )}
             </motion.div>
 
@@ -262,74 +294,29 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* Weekly Goal Progress */}
+            {/* Weekly Summary */}
             <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.25 }}
                 className="card"
             >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                    <Target size={16} style={{ color: 'var(--fp-amber)' }} />
-                    <p className="text-heading" style={{ fontSize: '0.9375rem' }}>Weekly Goal</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                    <BarChart2 size={16} style={{ color: 'var(--fp-amber)' }} />
+                    <p className="text-heading" style={{ fontSize: '0.9375rem' }}>This Week</p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-                    {/* Ring */}
-                    <div className="goal-ring" style={{ width: 90, height: 90, flexShrink: 0 }}>
-                        <svg width={90} height={90} viewBox="0 0 90 90">
-                            <circle cx={45} cy={45} r={ringR} fill="none" stroke="var(--fp-ring-bg)" strokeWidth={6} />
-                            <circle
-                                cx={45} cy={45} r={ringR}
-                                fill="none"
-                                stroke="var(--fp-amber)"
-                                strokeWidth={6}
-                                strokeLinecap="round"
-                                strokeDasharray={ringC}
-                                strokeDashoffset={ringC - (ringC * hoursGoalPct) / 100}
-                                transform="rotate(-90 45 45)"
-                            />
-                        </svg>
-                        <div style={{
-                            position: 'absolute', inset: 0,
-                            display: 'flex', flexDirection: 'column',
-                            alignItems: 'center', justifyContent: 'center',
-                        }}>
-                            <span className="text-mono-sm" style={{ fontWeight: 600, lineHeight: 1 }}>
-                                {Math.round(hoursGoalPct)}%
-                            </span>
-                        </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', textAlign: 'center' }}>
+                    <div style={{ padding: '0.75rem', background: 'var(--fp-surface)', borderRadius: 'var(--fp-radius-md)', border: '1px solid var(--fp-border)' }}>
+                        <p className="text-caption" style={{ marginBottom: '0.375rem' }}>Hours</p>
+                        <p className="text-mono-sm" style={{ color: 'var(--fp-amber)', fontWeight: 700 }}>{formatHoursMinutes(totalWeekHours)}</p>
                     </div>
-                    {/* Stats */}
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', marginBottom: '0.25rem' }}>
-                                <span className="text-caption">Hours</span>
-                                <span className="text-mono-sm">{formatHoursMinutes(totalWeekHours)} / {profile.weeklyGoal.hoursTarget}h</span>
-                            </div>
-                            <div className="progress-bar">
-                                <motion.div
-                                    className="progress-fill"
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${hoursGoalPct}%` }}
-                                    transition={{ duration: 0.8, delay: 0.3 }}
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', marginBottom: '0.25rem' }}>
-                                <span className="text-caption">Miles</span>
-                                <span className="text-mono-sm">{weeklyMiles.toFixed(0)} / {profile.weeklyGoal.milesTarget}</span>
-                            </div>
-                            <div className="progress-bar">
-                                <motion.div
-                                    className="progress-fill"
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${milesGoalPct}%` }}
-                                    transition={{ duration: 0.8, delay: 0.4 }}
-                                    style={{ background: 'linear-gradient(90deg, var(--fp-info), #60a5fa)' }}
-                                />
-                            </div>
-                        </div>
+                    <div style={{ padding: '0.75rem', background: 'var(--fp-surface)', borderRadius: 'var(--fp-radius-md)', border: '1px solid var(--fp-border)' }}>
+                        <p className="text-caption" style={{ marginBottom: '0.375rem' }}>Miles</p>
+                        <p className="text-mono-sm" style={{ color: 'var(--fp-info)', fontWeight: 700 }}>{weeklyMiles.toFixed(0)}</p>
+                    </div>
+                    <div style={{ padding: '0.75rem', background: 'var(--fp-surface)', borderRadius: 'var(--fp-radius-md)', border: '1px solid var(--fp-border)' }}>
+                        <p className="text-caption" style={{ marginBottom: '0.375rem' }}>Shifts</p>
+                        <p className="text-mono-sm" style={{ color: 'var(--fp-success)', fontWeight: 700 }}>{weekEntries.length}</p>
                     </div>
                 </div>
             </motion.div>
@@ -346,25 +333,13 @@ export default function DashboardPage() {
                         <DollarSign size={16} style={{ color: 'var(--fp-amber)' }} />
                         <p className="text-heading" style={{ fontSize: '0.9375rem' }}>This Week&apos;s Earnings</p>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                            <p className="text-mono-md" style={{ color: 'var(--fp-amber)' }}>
-                                {formatCurrency(earnings.total)}
-                            </p>
-                            <p className="text-caption" style={{ marginTop: '0.25rem' }}>
-                                Regular: {formatCurrency(earnings.regular)}
-                                {earnings.overtime > 0 && ` · OT: ${formatCurrency(earnings.overtime)}`}
-                            </p>
-                        </div>
-                        {weeklyFuel > 0 && (
-                            <div style={{ textAlign: 'right' }}>
-                                <p className="text-caption">Fuel Spent</p>
-                                <p className="text-mono-sm" style={{ color: 'var(--fp-error)' }}>
-                                    -{formatCurrency(weeklyFuel)}
-                                </p>
-                            </div>
-                        )}
-                    </div>
+                    <p className="text-mono-md" style={{ color: 'var(--fp-amber)' }}>
+                        {formatCurrency(earnings.total)}
+                    </p>
+                    <p className="text-caption" style={{ marginTop: '0.25rem' }}>
+                        Regular: {formatCurrency(earnings.regular)}
+                        {earnings.overtime > 0 && ` · OT: ${formatCurrency(earnings.overtime)}`}
+                    </p>
                 </motion.div>
             )}
 

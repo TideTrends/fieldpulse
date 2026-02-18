@@ -5,17 +5,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileText, Plus, Trash2, Search, Pin, PinOff,
     Tag, X, Smile, Cloud, Sun, CloudRain,
-    Frown, Meh, SmilePlus,
+    Frown, Meh, SmilePlus, Mic, Check
 } from 'lucide-react';
 import { useStore } from '@/lib/store';
 import { VoiceLogger } from '@/components/SmartWidgets';
+import TagSelector from '@/components/TagSelector';
 import type { VoiceCommand } from '@/lib/voice';
 
 const moodOptions = [
-    { value: 'great' as const, label: '🔥 Great', icon: SmilePlus },
-    { value: 'good' as const, label: '😊 Good', icon: Smile },
-    { value: 'okay' as const, label: '😐 Okay', icon: Meh },
-    { value: 'tough' as const, label: '😤 Tough', icon: Frown },
+    { value: 'great' as const, label: 'Great', icon: SmilePlus, color: 'var(--fp-emerald)' },
+    { value: 'good' as const, label: 'Good', icon: Smile, color: 'var(--fp-info)' },
+    { value: 'okay' as const, label: 'Okay', icon: Meh, color: 'var(--fp-amber)' },
+    { value: 'tough' as const, label: 'Tough', icon: Frown, color: 'var(--fp-error)' },
 ];
 
 export default function NotesPage() {
@@ -164,9 +165,14 @@ export default function NotesPage() {
             </div>
 
             {/* Tag Filter */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                <button className={`tag ${!filterTag ? 'tag-active' : ''}`} onClick={() => setFilterTag(null)}>All</button>
-                {customTags.map(tag => (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+                <button
+                    className={`tag ${!filterTag ? 'tag-active' : ''}`}
+                    onClick={() => setFilterTag(null)}
+                >
+                    All Notes
+                </button>
+                {customTags.slice(0, 6).map(tag => (
                     <button
                         key={tag}
                         className={`tag ${filterTag === tag ? 'tag-active' : ''}`}
@@ -221,64 +227,43 @@ export default function NotesPage() {
 
                             {/* Mood */}
                             <div>
-                                <label className="input-label" style={{ marginBottom: '0.375rem' }}>How was today?</label>
-                                <div style={{ display: 'flex', gap: '0.375rem' }}>
-                                    {moodOptions.map(m => (
-                                        <button
-                                            key={m.value}
-                                            className={`tag ${selectedMood === m.value ? 'tag-active' : ''}`}
-                                            onClick={() => setSelectedMood(selectedMood === m.value ? null : m.value)}
-                                            style={{ flex: 1, justifyContent: 'center', fontSize: '0.6875rem' }}
-                                        >
-                                            {m.label}
-                                        </button>
-                                    ))}
+                                <label className="input-label" style={{ marginBottom: '0.75rem' }}>How was today?</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
+                                    {moodOptions.map(m => {
+                                        const IsActive = selectedMood === m.value;
+                                        return (
+                                            <button
+                                                key={m.value}
+                                                className={`card-glass ${IsActive ? 'card-active' : ''}`}
+                                                onClick={() => setSelectedMood(IsActive ? null : m.value)}
+                                                style={{
+                                                    padding: '0.75rem',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem',
+                                                    border: IsActive ? `1px solid ${m.color}` : undefined,
+                                                    background: IsActive ? `${m.color}10` : undefined,
+                                                }}
+                                            >
+                                                <m.icon size={20} style={{ color: IsActive ? m.color : 'var(--fp-text-muted)' }} />
+                                                <span className="text-caption" style={{
+                                                    fontWeight: IsActive ? 600 : 400,
+                                                    color: IsActive ? m.color : 'var(--fp-text-secondary)'
+                                                }}>
+                                                    {m.label}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
 
-                            {/* Tags */}
-                            <div>
-                                <label className="input-label" style={{ marginBottom: '0.375rem' }}>Tags</label>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                                    {customTags.map(tag => (
-                                        <span
-                                            key={tag}
-                                            className={`tag ${selectedTags.includes(tag) ? 'tag-active' : ''}`}
-                                            onClick={() => toggleTag(tag)}
-                                        >
-                                            {tag}
-                                        </span>
-                                    ))}
-                                </div>
-                                {/* Inline add tag */}
-                                <div style={{ display: 'flex', gap: '0.375rem', marginTop: '0.5rem' }}>
-                                    <input
-                                        className="input"
-                                        placeholder="New tag..."
-                                        value={newTag}
-                                        onChange={e => setNewTag(e.target.value)}
-                                        style={{ fontSize: '0.8125rem' }}
-                                        onKeyDown={e => {
-                                            if (e.key === 'Enter' && newTag.trim()) {
-                                                addTag(newTag.trim());
-                                                setSelectedTags(prev => [...prev, newTag.trim()]);
-                                                setNewTag('');
-                                            }
-                                        }}
-                                    />
-                                    {newTag.trim() && (
-                                        <button className="btn btn-secondary btn-icon" style={{ width: 36, height: 36 }} onClick={() => {
-                                            if (newTag.trim()) {
-                                                addTag(newTag.trim());
-                                                setSelectedTags(prev => [...prev, newTag.trim()]);
-                                                setNewTag('');
-                                            }
-                                        }}>
-                                            <Plus size={14} />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
+                            {/* Unified Tag Selector */}
+                            <TagSelector
+                                selectedTags={selectedTags}
+                                onTagToggle={toggleTag}
+                            />
 
                             <button className="btn btn-primary" onClick={handleSubmit}>
                                 <Plus size={14} /> Save Note
@@ -319,9 +304,20 @@ export default function NotesPage() {
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                         <div style={{ flex: 1 }}>
                                             {note.mood && (
-                                                <span style={{ fontSize: '0.75rem', marginBottom: '0.25rem', display: 'block' }}>
-                                                    {moodOptions.find(m => m.value === note.mood)?.label}
-                                                </span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.375rem' }}>
+                                                    {(() => {
+                                                        const m = moodOptions.find(opt => opt.value === note.mood);
+                                                        if (!m) return null;
+                                                        return (
+                                                            <>
+                                                                <m.icon size={12} style={{ color: m.color }} />
+                                                                <span className="text-caption" style={{ fontWeight: 600, color: m.color, textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.625rem' }}>
+                                                                    {m.label}
+                                                                </span>
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </div>
                                             )}
                                             {note.whatIDid && (
                                                 <p style={{ fontSize: '0.875rem', fontWeight: 500, lineHeight: 1.4 }}>{note.whatIDid}</p>

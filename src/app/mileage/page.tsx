@@ -5,20 +5,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     MapPin, Navigation, ArrowRight, Plus, Trash2, Square,
     Car, Briefcase, Home, Coffee, History, Info, TrendingUp,
-    Calendar, Gauge, Map
+    Calendar, Gauge, Map, Edit3, X, Check
 } from 'lucide-react';
 import {
     useStore,
-    formatCurrency,
     getMilesForRange,
-    getMileageReimbursement,
 } from '@/lib/store';
 
 type MileageTab = 'work' | 'personal' | 'all';
 
 export default function MileagePage() {
     const {
-        mileageEntries, addMileageEntry, deleteMileageEntry,
+        mileageEntries, addMileageEntry, updateMileageEntry, deleteMileageEntry,
         isTripRunning, activeTripStart, startTrip, endTrip,
         showToast, profile,
     } = useStore();
@@ -32,6 +30,14 @@ export default function MileagePage() {
     const [manualEnd, setManualEnd] = useState('');
     const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
     const [manualPurpose, setManualPurpose] = useState<'work' | 'personal' | 'commute'>('work');
+
+    // Edit State
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editDate, setEditDate] = useState('');
+    const [editStart, setEditStart] = useState('');
+    const [editEnd, setEditEnd] = useState('');
+    const [editPurpose, setEditPurpose] = useState<'work' | 'personal' | 'commute'>('work');
+    const [editNotes, setEditNotes] = useState('');
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -50,9 +56,8 @@ export default function MileagePage() {
         const week = getMilesForRange(mileageEntries, 7, activeTab === 'all' ? undefined : activeTab as 'work' | 'personal');
         const month = getMilesForRange(mileageEntries, 30, activeTab === 'all' ? undefined : activeTab as 'work' | 'personal');
         const total = entries.reduce((s, e) => s + e.tripMiles, 0);
-        const reimbursement = getMileageReimbursement(entries.filter(e => e.purpose === 'work'));
 
-        return { today, week, month, total, reimbursement };
+        return { today, week, month, total };
     }, [mileageEntries, activeTab]);
 
     const handleStartTrip = () => {
@@ -105,6 +110,34 @@ export default function MileagePage() {
         showToast('Trip added!');
     };
 
+    const startEdit = (entry: any) => {
+        setEditingId(entry.id);
+        setEditDate(entry.date);
+        setEditStart(entry.startMileage.toString());
+        setEditEnd(entry.endMileage?.toString() || '');
+        setEditPurpose(entry.purpose);
+        setEditNotes(entry.notes || '');
+    };
+
+    const saveEdit = (id: string) => {
+        const s = parseFloat(editStart);
+        const e = parseFloat(editEnd);
+        if (isNaN(s) || isNaN(e) || e <= s) {
+            showToast('Enter valid start/end values', 'error');
+            return;
+        }
+        updateMileageEntry(id, {
+            date: editDate,
+            startMileage: s,
+            endMileage: e,
+            tripMiles: e - s,
+            purpose: editPurpose,
+            notes: editNotes,
+        });
+        setEditingId(null);
+        showToast('Trip updated');
+    };
+
     const purposeIcons = { work: Briefcase, personal: Home, commute: Coffee };
     const purposeColors = { work: 'var(--fp-amber)', personal: 'var(--fp-info)', commute: 'var(--fp-success)' };
 
@@ -150,7 +183,7 @@ export default function MileagePage() {
             </div>
 
             {/* Stats Grid */}
-            <div className="stat-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className="stat-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
                 <div className="card-glass" style={{ textAlign: 'center' }}>
                     <p className="text-caption">Today</p>
                     <p className="text-mono-md" style={{ color: 'var(--fp-blue)' }}>{stats.today.toFixed(1)} <span style={{ fontSize: '0.625rem' }}>MI</span></p>
@@ -163,12 +196,6 @@ export default function MileagePage() {
                     <p className="text-caption">Lifetime</p>
                     <p className="text-mono-md">{stats.total.toFixed(0)} <span style={{ fontSize: '0.625rem' }}>MI</span></p>
                 </div>
-                {activeTab === 'work' && (
-                    <div className="card-glass" style={{ textAlign: 'center', background: 'var(--fp-success-bg)', borderColor: 'rgba(16, 185, 129, 0.2)' }}>
-                        <p className="text-caption" style={{ color: 'var(--fp-success)' }}>Reimbursement</p>
-                        <p className="text-mono-md" style={{ color: 'var(--fp-success)' }}>{formatCurrency(stats.reimbursement)}</p>
-                    </div>
-                )}
             </div>
 
             {/* Active Trip Section */}
@@ -344,14 +371,61 @@ export default function MileagePage() {
                                                 </div>
                                             </div>
                                         </div>
-                                        <button
-                                            className="btn btn-ghost btn-icon"
-                                            onClick={() => { deleteMileageEntry(entry.id); showToast('Trip deleted'); }}
-                                            style={{ height: 32, width: 32 }}
-                                        >
-                                            <Trash2 size={14} style={{ color: 'var(--fp-error)' }} />
-                                        </button>
+                                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                            <button
+                                                className="btn btn-ghost btn-icon"
+                                                onClick={() => editingId === entry.id ? setEditingId(null) : startEdit(entry)}
+                                                style={{ height: 32, width: 32 }}
+                                            >
+                                                {editingId === entry.id ? <X size={14} /> : <Edit3 size={14} />}
+                                            </button>
+                                            <button
+                                                className="btn btn-ghost btn-icon"
+                                                onClick={() => { deleteMileageEntry(entry.id); showToast('Trip deleted'); }}
+                                                style={{ height: 32, width: 32 }}
+                                            >
+                                                <Trash2 size={14} style={{ color: 'var(--fp-error)' }} />
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {editingId === entry.id && (
+                                        <div className="section-gap" style={{ marginTop: '1rem', gap: '0.75rem', padding: '1rem', background: 'var(--fp-surface)', borderRadius: 'var(--fp-radius-md)', border: '1px solid var(--fp-border)' }}>
+                                            <div className="input-group">
+                                                <label className="input-label"><Calendar size={12} /> Date</label>
+                                                <input className="input" type="date" value={editDate} onChange={e => setEditDate(e.target.value)} />
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '0.75rem', alignItems: 'center' }}>
+                                                <div className="input-group">
+                                                    <label className="input-label">Start</label>
+                                                    <input className="input" type="number" value={editStart} onChange={e => setEditStart(e.target.value)} />
+                                                </div>
+                                                <ArrowRight size={14} style={{ color: 'var(--fp-text-muted)', marginTop: '1rem' }} />
+                                                <div className="input-group">
+                                                    <label className="input-label">End</label>
+                                                    <input className="input" type="number" value={editEnd} onChange={e => setEditEnd(e.target.value)} />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="input-label" style={{ marginBottom: '0.5rem' }}>Purpose</label>
+                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    {(['work', 'personal', 'commute'] as const).map(p => (
+                                                        <button
+                                                            key={p}
+                                                            className={`tag ${editPurpose === p ? 'tag-active' : ''}`}
+                                                            onClick={() => setEditPurpose(p)}
+                                                            style={{ flex: 1, justifyContent: 'center', padding: '0.4rem', fontSize: '0.625rem' }}
+                                                        >
+                                                            {p.charAt(0).toUpperCase() + p.slice(1)}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <button className="btn btn-primary" onClick={() => saveEdit(entry.id)}>
+                                                <Check size={14} /> Save Changes
+                                            </button>
+                                        </div>
+                                    )}
                                 </motion.div>
                             );
                         })
