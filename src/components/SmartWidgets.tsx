@@ -52,32 +52,54 @@ export function InsightsCard() {
                 </span>
             </div>
 
-            <div className="section-gap" style={{ gap: '0.5rem' }}>
+            <div
+                className="hide-scrollbar"
+                style={{
+                    display: 'flex',
+                    gap: '0.75rem',
+                    overflowX: 'auto',
+                    paddingBottom: '0.5rem',
+                    marginRight: '-1rem',
+                    paddingRight: '1rem'
+                }}
+            >
                 {displayed.map((insight, i) => (
                     <motion.div
                         key={insight.id}
-                        initial={{ opacity: 0, x: -8 }}
+                        initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.05 }}
+                        transition={{ delay: i * 0.1 }}
+                        className="glass-card"
                         style={{
-                            display: 'flex',
-                            gap: '0.5rem',
-                            padding: '0.5rem',
-                            borderRadius: 'var(--fp-radius-md)',
-                            background: 'var(--fp-surface)',
+                            minWidth: '260px',
+                            padding: '1rem',
+                            borderRadius: 'var(--fp-radius-lg)',
+                            background: 'rgba(30, 41, 59, 0.7)', // Darker glass
+                            backdropFilter: 'blur(12px)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            flexShrink: 0,
+                            scrollSnapAlign: 'start'
                         }}
                     >
-                        <div style={{ color: colorMap[insight.severity], marginTop: '2px', flexShrink: 0 }}>
-                            {iconMap[insight.type]}
-                        </div>
-                        <div>
-                            <p className="text-body" style={{ fontWeight: 600, fontSize: '0.75rem' }}>
-                                {insight.icon} {insight.title}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            <div style={{
+                                color: colorMap[insight.severity],
+                                background: `color-mix(in srgb, ${colorMap[insight.severity]} 15%, transparent)`,
+                                padding: '0.4rem',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
+                                {iconMap[insight.type]}
+                            </div>
+                            <p className="text-body" style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--fp-text-primary)' }}>
+                                {insight.title}
                             </p>
-                            <p className="text-caption" style={{ fontSize: '0.6875rem', marginTop: '0.125rem' }}>
-                                {insight.body}
-                            </p>
                         </div>
+                        <p className="text-caption" style={{ fontSize: '0.75rem', lineHeight: '1.4' }}>
+                            {insight.body}
+                        </p>
                     </motion.div>
                 ))}
             </div>

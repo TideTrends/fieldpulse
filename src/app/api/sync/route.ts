@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,6 +72,10 @@ const TABLE_MAP: Record<string, { table: string; columns: Record<string, string>
  */
 export async function GET() {
     try {
+        const session = await getSession();
+        if (!session) return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+        const userId = session.userId;
+
         const data: Record<string, unknown> = {};
 
         const TABLES_WITH_CREATED_AT = new Set([
@@ -79,7 +84,7 @@ export async function GET() {
 
         for (const [key, { table, columns }] of Object.entries(TABLE_MAP)) {
             const orderClause = TABLES_WITH_CREATED_AT.has(table) ? ' ORDER BY created_at DESC NULLS LAST' : '';
-            const rows = await query(`SELECT * FROM ${table}${orderClause}`);
+            const rows = await query(`SELECT * FROM ${table} WHERE user_id = $1${orderClause}`, [userId]);
             // Map DB columns back to camelCase
             const reverseMap = Object.fromEntries(
                 Object.entries(columns).map(([js, db]) => [db, js])
@@ -95,7 +100,7 @@ export async function GET() {
         }
 
         // Also get profile
-        const profileRows = await query('SELECT * FROM fp_profile WHERE id = $1', ['default']);
+        const profileRows = await query('SELECT * FROM fp_profile WHERE user_id = $1', [userId]);
         if (profileRows.length > 0) {
             const row = profileRows[0] as Record<string, unknown>;
             data.profile = {
@@ -122,7 +127,7 @@ export async function GET() {
         }
 
         // Get settings (custom tags, pinned notes, etc.)
-        const settingsRows = await query('SELECT key, value FROM fp_settings');
+        const settingsRows = await query('SELECT key, value FROM fp_settings WHERE user_id = $1', [userId]);
         const settings: Record<string, unknown> = {};
         for (const row of settingsRows as { key: string; value: unknown }[]) {
             settings[row.key] = row.value;
@@ -147,15 +152,19 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
 
+        const session = await getSession();
+        if (!session) return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+        const userId = session.userId;
+
         // Upsert profile
         if (body.profile) {
             const p = body.profile;
             await query(`
-                INSERT INTO fp_profile (id, name, company, role, default_start_hour, default_end_hour,
+                INSERT INTO fp_profile (id, user_id, name, company, role, default_start_hour, default_end_hour,
                     mileage_unit, fuel_unit, onboarding_complete, hourly_rate, overtime_threshold,
                     overtime_multiplier, weekly_goal_hours, weekly_goal_miles, weekly_goal_fuel_budget,
                     currency, date_format, tags, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW())
+                VALUES ($1, $19, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW())
                 ON CONFLICT (id) DO UPDATE SET
                     name = $2, company = $3, role = $4, default_start_hour = $5, default_end_hour = $6,
                     mileage_unit = $7, fuel_unit = $8, onboarding_complete = $9, hourly_rate = $10,
@@ -163,14 +172,14 @@ export async function POST(req: NextRequest) {
                     weekly_goal_miles = $14, weekly_goal_fuel_budget = $15, currency = $16,
                     date_format = $17, tags = $18, updated_at = NOW()
             `, [
-                'default', p.name || '', p.company || '', p.role || '',
+                'prof_' + userId, p.name || '', p.company || '', p.role || '',
                 p.defaultStartHour ?? 7, p.defaultEndHour ?? 17,
                 p.mileageUnit || 'miles', p.fuelUnit || 'gallons',
                 p.onboardingComplete ?? false, p.hourlyRate ?? 0,
                 p.overtimeThreshold ?? 8, p.overtimeMultiplier ?? 1.5,
                 p.weeklyGoal?.hoursTarget ?? 40, p.weeklyGoal?.milesTarget ?? 500,
                 p.weeklyGoal?.fuelBudget ?? 200, p.currency || 'USD',
-                p.dateFormat || 'US', p.tags || [],
+                p.dateFormat || 'US', p.tags || [], userId
             ]);
         }
 
@@ -188,21 +197,24 @@ export async function POST(req: NextRequest) {
                     .filter(([jsKey]) => item[jsKey] !== undefined)
                     .map(([jsKey]) => jsKey);
 
-                const values = jsKeys.map(k => item[k]);
-                const placeholders = values.map((_, i) => `$${i + 1}`);
+                const values = [...jsKeys.map(k => item[k]), userId];
+                const placeholders = values.map((_, i) => '$' + (i + 1));
 
                 const updateClauses = dbColumns
                     .filter(col => col !== 'id')
                     .map((col, _idx) => {
                         const paramIdx = dbColumns.indexOf(col) + 1;
-                        return `${col} = $${paramIdx}`;
+                        return col + ' = $' + paramIdx;
                     });
+
+                // Add user_id column explicitly to columns that will be inserted
+                dbColumns.push('user_id');
 
                 if (dbColumns.length > 0 && updateClauses.length > 0) {
                     await query(
-                        `INSERT INTO ${mapping.table} (${dbColumns.join(', ')})
-                         VALUES (${placeholders.join(', ')})
-                         ON CONFLICT (id) DO UPDATE SET ${updateClauses.join(', ')}`,
+                        'INSERT INTO ' + mapping.table + ' (' + dbColumns.join(', ') + ')' +
+                        ' VALUES (' + placeholders.join(', ') + ')' +
+                        ' ON CONFLICT (id) DO UPDATE SET ' + updateClauses.join(', '),
                         values
                     );
                 }
@@ -213,9 +225,9 @@ export async function POST(req: NextRequest) {
         if (body.settings && typeof body.settings === 'object') {
             for (const [key, value] of Object.entries(body.settings)) {
                 await query(
-                    `INSERT INTO fp_settings (key, value) VALUES ($1, $2)
-                     ON CONFLICT (key) DO UPDATE SET value = $2`,
-                    [key, JSON.stringify(value)]
+                    'INSERT INTO fp_settings (key, value, user_id) VALUES ($1, $2, $3) ' +
+                    'ON CONFLICT (key) DO UPDATE SET value = $2, user_id = $3',
+                    [key, JSON.stringify(value), userId]
                 );
             }
         }

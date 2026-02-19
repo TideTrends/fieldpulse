@@ -6,6 +6,16 @@ import { query } from './db';
  */
 export async function runMigrations(): Promise<void> {
     await query(`
+        CREATE TABLE IF NOT EXISTS fp_users (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            name TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+    `);
+
+    await query(`
         CREATE TABLE IF NOT EXISTS fp_profile (
             id TEXT PRIMARY KEY DEFAULT 'default',
             name TEXT NOT NULL DEFAULT '',
@@ -141,6 +151,14 @@ export async function runMigrations(): Promise<void> {
             value JSONB NOT NULL DEFAULT '{}'
         );
     `);
+
+    const tables = [
+        'fp_profile', 'fp_time_entries', 'fp_mileage_entries', 'fp_fuel_logs',
+        'fp_daily_notes', 'fp_saved_locations', 'fp_vehicles', 'fp_location_logs', 'fp_settings'
+    ];
+    for (const table of tables) {
+        await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'default';`);
+    }
 
     // Create indexes for common queries
     await query(`CREATE INDEX IF NOT EXISTS idx_time_entries_date ON fp_time_entries(date);`);
